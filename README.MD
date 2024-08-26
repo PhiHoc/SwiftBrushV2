@@ -99,16 +99,33 @@
   ```bash
     python tools/resize.py <coco2014_path> <coco2014_resized_path> --nsamples=-1
   ```
-  2. Resize the inferred folder: `python tools/resize.py main <infer_folder> <infer_resized_folder>`
+  2. Resize the inferred folder:
+  ```bash
+  python tools/resize.py main <infer_folder> <infer_resized_folder>
+  ```
   3. Evaluate:
-  - FID: `python eval/fid.py <infer_resized_folder> --ref-dir=<coco2014_resized_path> --no-crop`
-  - CLIP Score: `python eval/clip_score.py <infer_resized_folder>  --batch-size=1024 --prompt_path=<coco2014_prompt_path>`
-  - Precision/Recall: `python eval/recall.py <coco2014_resized_path> <infer_resized_folder>`
+  - **FID**:
+    ```bash
+    python eval/fid.py <infer_resized_folder> --ref-dir=<coco2014_resized_path> --no-crop
+    ```
+  - **CLIP Score**:
+    ```bash
+    python eval/clip_score.py <infer_resized_folder>  --batch-size=1024 --prompt_path=<coco2014_prompt_path>
+    ```
+  - **Precision/Recall**:
+    ```bash
+    python eval/recall.py <coco2014_resized_path> <infer_resized_folder>
+    ```
   - One can use `scripts/eval.sh` to automate step 4, but remember to change the paths
 - For HPSv2 evaluation metrics:
-  - Infer using the corresponding `infer_hps.py` script.
-    - `python infer_hps.py <ckpt_path> `
-  - Get the final score with: `python eval/hps.py <hps_infer_folder>`
+  - Infer using the corresponding `infer_hps.py` script:
+    ```bash
+    python infer_hps.py <ckpt_path>
+    ```
+  - Get the final score with:
+    ```bash
+    python eval/hps.py <hps_infer_folder>
+    ```
 
 ## ✨ Citation
 
