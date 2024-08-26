@@ -1,0 +1,2 @@
+extend-exclude = ["eval/cleanfid"]
+ignore = ["E402"]
