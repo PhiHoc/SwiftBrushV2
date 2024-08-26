@@ -5,6 +5,7 @@
   - [Inference](#inference)
   - [Evaluate](#evaluate)
 - [✨ Citation](#-citation)
+- [License](#license)
 
 <p align="center">
   <h1 align="center">SwiftBrush v2: Make Your One-step Diffusion Model Better Than Its Teacher</h1>
@@ -120,4 +121,13 @@ Please CITE our paper whenever this repository is used to help produce published
   booktitle={Proceedings of the European Conference on Computer Vision (ECCV)},
   year={2024}
 }
+```
+
+## License
+
+```
+Copyright (c) 2024 VinAI
+Licensed under the Creative Commons Attribution Non Commercial 4.0 International.
+You may obtain a copy of the License at
+    https://creativecommons.org/licenses/by-nc/4.0/
 ```
