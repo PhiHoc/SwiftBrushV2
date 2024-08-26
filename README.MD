@@ -4,6 +4,7 @@
 - [Running](#running)
   - [Inference](#inference)
   - [Evaluate](#evaluate)
+- [✨ Citation](#-citation)
 
 <p align="center">
   <h1 align="center">SwiftBrush v2: Make Your One-step Diffusion Model Better Than Its Teacher</h1>
@@ -37,6 +38,7 @@
 <p align="center">
     <!-- <a href="https://arxiv.org/abs/"><img alt='arXiv' src="https://img.shields.io/badge/arXiv-2312.07409-b31b1b.svg"></a> -->
     <a href="https://swiftbrushv2.github.io"><img alt='page' src="https://img.shields.io/badge/Project-Website-orange"></a>
+    <a href="https://vinairesearch.github.io/SwiftBrush/"><img alt='page' src="https://img.shields.io/badge/SwiftBrushV1-Website-pink"></a>
   </p>
   <br>
 </p>
@@ -106,3 +108,16 @@
   - Infer using the corresponding `infer_hps.py` script.
     - `python infer_hps.py <ckpt_path> `
   - Get the final score with: `python eval/hps.py <hps_infer_folder>`
+
+## ✨ Citation
+
+Please CITE our paper whenever this repository is used to help produce published results or incorporated into other software:
+
+```bib
+@article{dao2024swiftbrushv2,
+  title={SwiftBrush v2: Make Your One-step Diffusion Model Better Than Its Teacher},
+  author={Trung Dao, Thuan Hoang Nguyen, Thanh Le, Duc Vu, Khoi Nguyen, Cuong Pham, Anh Tran},
+  booktitle={Proceedings of the European Conference on Computer Vision (ECCV)},
+  year={2024}
+}
+```
