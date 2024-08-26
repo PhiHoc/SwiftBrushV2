@@ -1,10 +1,10 @@
 - [Abstract](#abstract)
+- [✨ Citation](#-citation)
 - [Project structure](#project-structure)
 - [Installation](#installation)
 - [Running](#running)
   - [Inference](#inference)
   - [Evaluate](#evaluate)
-- [✨ Citation](#-citation)
 - [License](#license)
 
 <p align="center">
@@ -13,11 +13,11 @@
   <p align="center">
     <a href="https://trung-dt.com/"><strong>Trung Dao</strong></a>
     &nbsp;&nbsp;
-    <a href="https://thuanz123.github.io"><strong>Thuan Hoang Nguyen<sup>*</sup></strong></a>
+    <a href="https://thuanz123.github.io"><strong>Thuan Hoang Nguyen</strong></a>
     &nbsp;&nbsp;
-    <a href="https://github.com/Luvata"><strong>Thanh Le<sup>*</sup></strong></a>
+    <a href="https://github.com/Luvata"><strong>Thanh Le</strong></a>
     &nbsp;&nbsp;
-    <a href="https://www.vinai.io"><strong>Duc Vu<sup>*</sup></strong></a>
+    <a href="https://www.vinai.io"><strong>Duc Vu</strong></a>
   </p>
   <p align="center">
     <a href="https://www.khoinguyen.org"><strong>Khoi Nguyen</strong></a>
@@ -27,10 +27,6 @@
     <a href="https://scholar.google.com/citations?user=FYZ5ODQAAAAJ&hl=en"><strong>Anh Tran</strong></a>
   </p>
   <br>
-
-<p align="center">
-    (*) denotes equal contribution.
-  </p>
 
 <div align="center">
         <img src="./assets/banner_v2.png", width="500">
@@ -47,6 +43,19 @@
 ## Abstract
 
 > &#160;   In this paper, we aim to enhance the performance of SwiftBrush, a prominent one-step text-to-image diffusion model, to be competitive with its multi-step Stable Diffusion counterpart. Initially, we explore the quality-diversity trade-off between SwiftBrush and SD Turbo: the former excels in image diversity, while the latter excels in image quality. This observation motivates our proposed modifications in the training methodology, including better weight initialization and efficient LoRA training. Moreover, our introduction of a novel clamped CLIP loss enhances image-text alignment and results in improved image quality. Remarkably, by combining the weights of models trained with efficient LoRA and full training, we achieve a new state-of-the-art one-step diffusion model, achieving an FID of 8.14 and surpassing all GAN-based and multi-step Stable Diffusion models.
+
+## ✨ Citation
+
+Please CITE our paper whenever this repository is used to help produce published results or incorporated into other software:
+
+```bib
+@article{dao2024swiftbrushv2,
+  title={SwiftBrush v2: Make Your One-step Diffusion Model Better Than Its Teacher},
+  author={Trung Dao, Thuan Hoang Nguyen, Thanh Le, Duc Vu, Khoi Nguyen, Cuong Pham, Anh Tran},
+  booktitle={Proceedings of the European Conference on Computer Vision (ECCV)},
+  year={2024}
+}
+```
 
 ## Project structure
 
@@ -126,19 +135,6 @@
     ```bash
     python eval/hps.py <hps_infer_folder>
     ```
-
-## ✨ Citation
-
-Please CITE our paper whenever this repository is used to help produce published results or incorporated into other software:
-
-```bib
-@article{dao2024swiftbrushv2,
-  title={SwiftBrush v2: Make Your One-step Diffusion Model Better Than Its Teacher},
-  author={Trung Dao, Thuan Hoang Nguyen, Thanh Le, Duc Vu, Khoi Nguyen, Cuong Pham, Anh Tran},
-  booktitle={Proceedings of the European Conference on Computer Vision (ECCV)},
-  year={2024}
-}
-```
 
 ## License
 
