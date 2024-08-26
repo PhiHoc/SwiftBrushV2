@@ -51,7 +51,7 @@
 ## Project structure
 
 - We provide the following files and folders:
-  - `tools`: utils code such as weight merging, original inference, text embedding extraction, resizing
+  - `tools`: utils code such as: text embedding extraction, resizing
   - `eval`: evaluation code
   - `dataset.json`: The MS-COCO2014 prompts used for evaluation.
 - We also provide the checkpoint at this [link](https://drive.google.com/drive/folders/1eUVwTrkOVWT2gCJ4TiWlZmCV2sODuvQD?usp=drive_link).
