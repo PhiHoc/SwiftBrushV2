@@ -1,6 +1,3 @@
-## Table of Contents
-
-- [Table of Contents](#table-of-contents)
 - [Abstract](#abstract)
 - [Project structure](#project-structure)
 - [Installation](#installation)
