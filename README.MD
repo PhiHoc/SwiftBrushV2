@@ -33,9 +33,9 @@
   </div>
 
 <p align="center">
-    <!-- <a href="https://arxiv.org/abs/"><img alt='arXiv' src="https://img.shields.io/badge/arXiv-2312.07409-b31b1b.svg"></a> -->
-    <a href="https://swiftbrushv2.github.io"><img alt='page' src="https://img.shields.io/badge/Project-Website-orange"></a>
-    <a href="https://vinairesearch.github.io/SwiftBrush/"><img alt='page' src="https://img.shields.io/badge/SwiftBrushV1-Website-pink"></a>
+    <a href="http://arxiv.org/abs/2408.14176"><img alt='arXiv' src="https://img.shields.io/badge/arXiv-2312.07409-b31b1b.svg"></a>
+    <a href="https://swiftbrushv2.github.io"><img alt='page' src="https://img.shields.io/badge/Project-Website-pink"></a>
+    <a href="https://vinairesearch.github.io/SwiftBrush/"><img alt='page' src="https://img.shields.io/badge/SwiftBrushV1-Website-purple"></a>
   </p>
   <br>
 </p>
@@ -46,7 +46,7 @@
 
 ## ✨ Citation
 
-Please CITE our paper whenever this repository is used to help produce published results or incorporated into other software:
+Please CITE [our paper](http://arxiv.org/abs/2408.14176) whenever this repository is used to help produce published results or incorporated into other software:
 
 ```bib
 @article{dao2024swiftbrushv2,
