@@ -49,7 +49,7 @@
 Please CITE [our paper](http://arxiv.org/abs/2408.14176) whenever this repository is used to help produce published results or incorporated into other software:
 
 ```bib
-@article{dao2024swiftbrushv2,
+@inproceedings{dao2024swiftbrushv2,
   title={SwiftBrush v2: Make Your One-step Diffusion Model Better Than Its Teacher},
   author={Trung Dao, Thuan Hoang Nguyen, Thanh Le, Duc Vu, Khoi Nguyen, Cuong Pham, Anh Tran},
   booktitle={Proceedings of the European Conference on Computer Vision (ECCV)},
