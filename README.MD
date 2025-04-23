@@ -64,6 +64,7 @@ Please CITE [our paper](http://arxiv.org/abs/2408.14176) whenever this repositor
   - `eval`: evaluation code
   - `dataset.json`: The MS-COCO2014 prompts used for evaluation.
 - We also provide the checkpoint at this [link](https://drive.google.com/drive/folders/1eUVwTrkOVWT2gCJ4TiWlZmCV2sODuvQD?usp=drive_link).
+- NOTE: While our codebase uses the 3-Clause BSD License, our model is derived from SD-Turbo and therefore must comply with SD-Turbo's [original license](https://huggingface.co/webml/models/blob/5085cddea6b3138215675660ec708f215cb28dd4/sd-turbo/LICENSE.txt)
 
 ## Installation
 
@@ -140,7 +141,7 @@ Please CITE [our paper](http://arxiv.org/abs/2408.14176) whenever this repositor
 
 ```
 Copyright (c) 2024 VinAI
-Licensed under the Creative Commons Attribution Non Commercial 4.0 International.
+Licensed under the 3-Clause BSD License.
 You may obtain a copy of the License at
-    https://creativecommons.org/licenses/by-nc/4.0/
+    https://opensource.org/license/bsd-3-clause
 ```
