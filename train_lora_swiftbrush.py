@@ -220,6 +220,14 @@ def main():
         datefmt="%m/%d/%Y %H:%M:%S",
         level=logging.INFO,
     )
+
+    if accelerator.is_main_process:
+        logger.info("=" * 40)
+        logger.info("TRAINING ARGUMENTS")
+        logger.info("=" * 40)
+        for k, v in vars(args).items():
+            logger.info(f"  - {k}: {v}")
+        logger.info("=" * 40)
     logger.info(accelerator.state, main_process_only=False)
 
     if args.seed is not None:
