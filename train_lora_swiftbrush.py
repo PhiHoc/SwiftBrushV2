@@ -1,5 +1,5 @@
 # train_lora_swiftbrush.py
-# PHIÊN BẢN CUỐI CÙNG - ĐÃ SỬA LỖI HOÀN CHỈNH
+# PHIÊN BẢN CUỐI CÙNG - ĐÃ SỬA LỖI VÀ THÊM TÍNH NĂNG RESUME CHECKPOINT
 
 # coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
@@ -21,6 +21,7 @@ import argparse
 import logging
 import math
 import os
+import re  # <<< THÊM MỚI: Cần cho việc tìm checkpoint
 import random
 import shutil
 from pathlib import Path
@@ -37,7 +38,7 @@ from accelerate.logging import get_logger
 from accelerate.utils import ProjectConfiguration, set_seed
 from huggingface_hub import create_repo, upload_folder
 from packaging import version
-from peft import LoraConfig  # Dùng PEFT để cấu hình LoRA
+from peft import LoraConfig
 from tqdm.auto import tqdm
 from transformers import CLIPTextModel, CLIPTokenizer
 
@@ -46,6 +47,7 @@ from diffusers import (
     AutoencoderKL,
     DDPMScheduler,
     UNet2DConditionModel,
+    StableDiffusionPipeline,  # <<< THÊM MỚI: Cần cho việc lưu LoRA weights
 )
 from diffusers.optimization import get_scheduler
 from diffusers.utils import is_wandb_available
@@ -93,6 +95,17 @@ def parse_args():
         default="swiftbrush-finetuned-lora",
         help="The output directory where the model predictions and checkpoints will be written.",
     )
+    # <<< BẮT ĐẦU PHẦN THÊM MỚI >>>
+    parser.add_argument(
+        "--resume_from_checkpoint",
+        type=str,
+        default="latest",
+        help=(
+            "Whether to resume from the latest checkpoint in `output_dir`. "
+            "Set to `None` to not resume."
+        ),
+    )
+    # <<< KẾT THÚC PHẦN THÊM MỚI >>>
     parser.add_argument(
         "--resolution",
         type=int,
@@ -293,10 +306,9 @@ def main():
     unet.add_adapter(lora_config)
 
     unet.to(accelerator.device, dtype=weight_dtype)
-    text_encoder.to(accelerator.device)  # Giữ ở fp32 để ổn định
+    text_encoder.to(accelerator.device)
 
     # 5. Optimizer
-    # Lấy các tham số có thể huấn luyện (chỉ LoRA và TI)
     lora_params = list(filter(lambda p: p.requires_grad, unet.parameters()))
     params_to_optimize = [
         {"params": lora_params, "lr": args.learning_rate},
@@ -314,12 +326,10 @@ def main():
     def collate_fn(examples):
         pixel_values = torch.stack([example["pixel_values"] for example in examples])
         pixel_values = pixel_values.to(memory_format=torch.contiguous_format).float()
-
         captions = [example["caption"] for example in examples]
         input_ids = tokenizer(
             captions, padding="max_length", truncation=True, max_length=tokenizer.model_max_length, return_tensors="pt",
         ).input_ids
-
         return {"pixel_values": pixel_values, "input_ids": input_ids}
 
     train_dataloader = torch.utils.data.DataLoader(
@@ -335,7 +345,6 @@ def main():
         num_training_steps=args.max_train_steps,
     )
 
-    # Chuẩn bị unet (đã có LoRA) thay vì lora_layers cũ
     unet, text_encoder, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
         unet, text_encoder, optimizer, train_dataloader, lr_scheduler
     )
@@ -345,10 +354,51 @@ def main():
 
     # 8. Vòng lặp Huấn luyện
     global_step = 0
+
+    # <<< BẮT ĐẦU PHẦN THÊM MỚI: RESUME TỪ CHECKPOINT >>>
+    if args.resume_from_checkpoint:
+        if args.resume_from_checkpoint != "latest":
+            path = os.path.basename(args.resume_from_checkpoint)
+        else:
+            # Tìm checkpoint mới nhất
+            dirs = os.listdir(args.output_dir)
+            dirs = [d for d in dirs if d.startswith("checkpoint")]
+            if len(dirs) > 0:
+                dirs = sorted(dirs, key=lambda x: int(x.split("-")[1]))
+                path = dirs[-1]
+            else:
+                path = None
+
+        if path is None:
+            accelerator.print(
+                f"Checkpoint '{args.resume_from_checkpoint}' not found. Starting a new training run."
+            )
+            args.resume_from_checkpoint = None
+        else:
+            accelerator.print(f"Resuming from checkpoint {path}")
+            accelerator.load_state(os.path.join(args.output_dir, path))
+            # Cập nhật global_step từ tên thư mục checkpoint
+            global_step = int(path.split("-")[1])
+
+            # Tính toán số bước đã qua trong epoch hiện tại để skip dataloader
+            resume_global_step = global_step * args.gradient_accumulation_steps
+            first_epoch = global_step // (len(train_dataloader) // args.gradient_accumulation_steps)
+            resume_step = resume_global_step % (len(train_dataloader) // args.gradient_accumulation_steps)
+
+    # <<< KẾT THÚC PHẦN THÊM MỚI >>>
+
     progress_bar = tqdm(range(global_step, args.max_train_steps), disable=not accelerator.is_local_main_process)
     progress_bar.set_description("Steps")
 
     for epoch in range(args.num_train_epochs):
+        # <<< THÊM MỚI: Logic skip dataloader khi resume >>>
+        if args.resume_from_checkpoint and epoch == first_epoch:
+            # Skip các batch đã xử lý
+            logger.info(f"Skipping {resume_step} batches from the dataloader to resume training.")
+            for _ in range(resume_step):
+                next(iter(train_dataloader))
+        # <<< KẾT THÚC >>>
+
         unet.train()
         text_encoder.train()
 
@@ -400,11 +450,28 @@ def main():
     # 9. Lưu kết quả cuối cùng
     accelerator.wait_for_everyone()
     if accelerator.is_main_process:
-        unet = accelerator.unwrap_model(unet)
-        # Dùng phương thức lưu trọng số LoRA của PEFT
-        unet.save_lora_weights(args.output_dir)
+        # <<< BẮT ĐẦU PHẦN SỬA LỖI >>>
+        logger.info("Saving final model...")
 
-        # Lưu cả các embedding đã học
+        # Lấy UNet gốc ra khỏi wrapper của accelerator
+        unet = accelerator.unwrap_model(unet)
+
+        # Tạo một pipeline đầy đủ để lưu trọng số LoRA đúng cách
+        pipeline = StableDiffusionPipeline.from_pretrained(
+            args.pretrained_model_name_or_path,
+            text_encoder=accelerator.unwrap_model(text_encoder),
+            vae=vae,
+            unet=unet,
+            tokenizer=tokenizer,
+        )
+
+        # Gọi phương thức save_lora_weights từ pipeline
+        # Trọng số sẽ được lưu vào file `pytorch_lora_weights.safetensors` trong output_dir
+        pipeline.save_lora_weights(args.output_dir)
+        logger.info(f"LoRA weights saved to {os.path.join(args.output_dir, 'pytorch_lora_weights.safetensors')}")
+        # <<< KẾT THÚC PHẦN SỬA LỖI >>>
+
+        # Lưu cả các embedding đã học (phần này vẫn giữ nguyên)
         unwrapped_text_encoder = accelerator.unwrap_model(text_encoder)
         learned_embeds = unwrapped_text_encoder.get_input_embeddings().weight[placeholder_token_ids]
         learned_embeds_dict = {
@@ -412,6 +479,7 @@ def main():
             "placeholder_tokens": placeholder_tokens
         }
         torch.save(learned_embeds_dict, os.path.join(args.output_dir, "learned_embeds.bin"))
+        logger.info(f"Learned embeddings saved to {os.path.join(args.output_dir, 'learned_embeds.bin')}")
 
     accelerator.end_training()
 
