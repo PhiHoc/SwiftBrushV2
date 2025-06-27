@@ -1,12 +1,11 @@
-# infer_peft_lora.py
-# Kịch bản inference cuối cùng, tương thích với LoRA được huấn luyện bằng PEFT (`add_adapter`)
+# infer_finetuned.py
+# Phiên bản cuối cùng, sử dụng Pipeline làm trung tâm để đảm bảo tính chính xác và ổn định.
 
 import torch
 import typer
 from pathlib import Path
 from accelerate.utils import set_seed
-from diffusers import AutoencoderKL, DDPMScheduler, UNet2DConditionModel
-from transformers import AutoTokenizer, CLIPTextModel
+from diffusers import StableDiffusionPipeline, UNet2DConditionModel
 from torchvision.utils import save_image
 
 app = typer.Typer(pretty_exceptions_show_locals=False)
@@ -17,34 +16,37 @@ def main(
         prompt: str = typer.Argument(..., help="Prompt to generate, e.g., 'a photo of a <class_0> bear'"),
         swiftbrush_checkpoint_path: Path = typer.Argument(...,
                                                           help="Path to the original SwiftBrush v2 UNet checkpoint directory."),
-        # MODIFICATION: Đối số bây giờ trỏ đến thư mục chứa adapter_model.safetensors
         lora_path: Path = typer.Argument(...,
-                                         help="Path to the finetuned LoRA directory (saved by `save_lora_weights`)."),
+                                         help="Path to the finetuned LoRA directory (the one containing the weights file)."),
         text_embeds_path: Path = typer.Argument(...,
                                                 help="Path to the 'learned_embeds.bin' file containing the finetuned text embeddings."),
-        output_dir: Path = typer.Option("generated_peft_lora", help="Path to the output directory.", dir_okay=True),
-        model_name: str = typer.Option("stabilityai/sd-turbo", help="Base Hugging Face model name."),
+        output_dir: Path = typer.Option("generated_images", help="Path to the output directory.", dir_okay=True),
+        base_model_name: str = typer.Option("stabilityai/sd-turbo", help="Base Hugging Face model name."),
         seed: int = typer.Option(42, help="A seed for reproducible generation."),
         nsamples: int = typer.Option(4, help="Number of images to generate."),
 ):
     """
-    Generates images using a SwiftBrush v2 model finetuned with PEFT LoRA adapters.
+    Generates images using a SwiftBrush v2 model finetuned with Diffusers LoRA.
     """
     set_seed(seed)
     output_dir.mkdir(exist_ok=True, parents=True)
     print(f"Output directory: {output_dir}")
 
-    # --- 1. Tải Mô hình Nền ---
-    print(f"Loading base models from '{model_name}'...")
+    device = "cuda"
     weight_dtype = torch.float16
-    noise_scheduler = DDPMScheduler.from_pretrained(model_name, subfolder="scheduler")
-    vae = AutoencoderKL.from_pretrained(model_name, subfolder="vae").to("cuda", dtype=weight_dtype)
 
-    print(f"Loading SwiftBrush v2 UNet from: {swiftbrush_checkpoint_path}")
-    unet = UNet2DConditionModel.from_pretrained(swiftbrush_checkpoint_path)
+    # --- 1. Tải Pipeline cơ sở và thay thế UNet ---
+    print(f"Loading base pipeline from '{base_model_name}'...")
+    # Tải pipeline hoàn chỉnh từ model gốc
+    pipeline = StableDiffusionPipeline.from_pretrained(
+        base_model_name,
+        torch_dtype=weight_dtype
+    )
 
-    tokenizer = AutoTokenizer.from_pretrained(model_name, subfolder="tokenizer")
-    text_encoder = CLIPTextModel.from_pretrained(model_name, subfolder="text_encoder")
+    print(f"Loading and replacing with SwiftBrush v2 UNet from: {swiftbrush_checkpoint_path}")
+    # Tải UNet của SwiftBrush và thay thế UNet mặc định trong pipeline
+    unet = UNet2DConditionModel.from_pretrained(swiftbrush_checkpoint_path, torch_dtype=weight_dtype)
+    pipeline.unet = unet
 
     # --- 2. Cập nhật Text Encoder với các Embedding đã học ---
     print(f"Loading and applying custom text embeddings from: {text_embeds_path}")
@@ -55,58 +57,50 @@ def main(
     placeholder_tokens = learned_embeds_dict["placeholder_tokens"]
     learned_embeds = learned_embeds_dict["text_embeds"]
 
-    tokenizer.add_tokens(placeholder_tokens)
-    token_ids = tokenizer.convert_tokens_to_ids(placeholder_tokens)
-    text_encoder.resize_token_embeddings(len(tokenizer))
+    # Thêm token mới vào tokenizer của pipeline
+    pipeline.tokenizer.add_tokens(placeholder_tokens)
+    token_ids = pipeline.tokenizer.convert_tokens_to_ids(placeholder_tokens)
 
+    # Thay đổi kích thước embedding của text encoder trong pipeline
+    pipeline.text_encoder.resize_token_embeddings(len(pipeline.tokenizer))
+
+    # Gán các embedding đã học
     with torch.no_grad():
-        text_encoder.get_input_embeddings().weight[token_ids] = learned_embeds.to(
-            text_encoder.get_input_embeddings().weight.dtype)
+        pipeline.text_encoder.get_input_embeddings().weight[token_ids] = learned_embeds.to(
+            pipeline.text_encoder.get_input_embeddings().weight.dtype
+        )
 
-    # --- 3. Áp dụng Trọng số LoRA vào UNet ---
-    # MODIFICATION START: Sử dụng phương thức tải LoRA mới của PEFT
-    print(f"Loading and applying PEFT LoRA adapter from: {lora_path}")
-    # Đây là phương thức hiện đại để tải các trọng số LoRA được lưu bởi `save_lora_weights`
-    unet.load_adapter(lora_path)
-    # MODIFICATION END
+    # --- 3. Tải và áp dụng Trọng số LoRA vào Pipeline ---
+    print(f"Loading and applying Diffusers LoRA weights from: {lora_path}")
+    # Bây giờ, chúng ta gọi phương thức `load_lora_weights` trên chính pipeline
+    # Pipeline sẽ tự động áp dụng các trọng số này vào UNet bên trong nó.
+    pipeline.load_lora_weights(lora_path)
 
-    # Chuyển tất cả mô hình lên GPU với dtype phù hợp
-    unet.to("cuda", dtype=weight_dtype)
-    text_encoder.to("cuda", dtype=weight_dtype)
+    # Chuyển toàn bộ pipeline lên GPU
+    pipeline.to(device)
 
-    # --- 4. Chuẩn bị và chạy Inference Một Bước ---
-    unet.eval()
-    text_encoder.eval()
-
-    timestep = torch.tensor([noise_scheduler.config.num_train_timesteps - 1], device="cuda")
-    alphas_cumprod = noise_scheduler.alphas_cumprod.to("cuda")
-    alpha_t = (alphas_cumprod[timestep] ** 0.5).view(-1, 1, 1, 1).to(dtype=weight_dtype)
-    sigma_t = ((1 - alphas_cumprod[timestep]) ** 0.5).view(-1, 1, 1, 1).to(dtype=weight_dtype)
-
+    # --- 4. Chạy Inference (đơn giản hơn rất nhiều) ---
     print(f"Generating {nsamples} images with prompt: '{prompt}'...")
+
+    # SD-Turbo chỉ cần 1 bước inference và không cần guidance
+    generator = torch.Generator(device=device)
     for i in range(nsamples):
-        noise = torch.randn(1, unet.config.in_channels, 64, 64, device="cuda", dtype=weight_dtype,
-                            generator=torch.manual_seed(seed + i))
+        generator.manual_seed(seed + i)
 
-        with torch.no_grad():
-            input_ids = tokenizer([prompt], padding="max_length", truncation=True,
-                                  max_length=tokenizer.model_max_length, return_tensors="pt").input_ids.to("cuda")
-            encoder_hidden_state = text_encoder(input_ids)[0].to(dtype=weight_dtype)
+        # Gọi thẳng pipeline, nó sẽ tự xử lý các bước denoising
+        image = pipeline(
+            prompt,
+            num_inference_steps=1,
+            guidance_scale=0.0,
+            generator=generator
+        ).images[0]
 
-        with torch.no_grad():
-            model_pred = unet(noise, timestep, encoder_hidden_state).sample
+        # Tạo tên file an toàn
+        prompt_safe_name = "".join(c if c.isalnum() else "_" for c in prompt)[:50]
+        output_path = output_dir / f"seed_{seed + i}_{prompt_safe_name}.png"
 
-        pred_original_sample = (noise - sigma_t * model_pred) / alpha_t
-        pred_original_sample = pred_original_sample / vae.config.scaling_factor
-
-        with torch.no_grad():
-            image = vae.decode(pred_original_sample.to(dtype=vae.dtype)).sample
-
-        image = (image / 2 + 0.5).clamp(0, 1)
-
-        prompt_safe_name = prompt.replace(" ", "_").replace("<", "").replace(">", "")
-        output_path = output_dir / f"{seed}_{i:03d}_{prompt_safe_name}.png"
-        save_image(image, output_path)
+        # Lưu ảnh
+        image.save(output_path)
         print(f"Saved image to {output_path}")
 
     print("Generation complete.")

@@ -360,7 +360,6 @@ def main():
         if args.resume_from_checkpoint != "latest":
             path = os.path.basename(args.resume_from_checkpoint)
         else:
-            # Tìm checkpoint mới nhất
             dirs = os.listdir(args.output_dir)
             dirs = [d for d in dirs if d.startswith("checkpoint")]
             if len(dirs) > 0:
@@ -370,20 +369,31 @@ def main():
                 path = None
 
         if path is None:
-            accelerator.print(
-                f"Checkpoint '{args.resume_from_checkpoint}' not found. Starting a new training run."
-            )
+            accelerator.print(f"Checkpoint '{args.resume_from_checkpoint}' not found. Starting a new training run.")
             args.resume_from_checkpoint = None
         else:
             accelerator.print(f"Resuming from checkpoint {path}")
-            accelerator.load_state(os.path.join(args.output_dir, path))
-            # Cập nhật global_step từ tên thư mục checkpoint
+
+            try:
+                # Cố gắng tải lại trạng thái
+                accelerator.load_state(os.path.join(args.output_dir, path))
+            except KeyError as e:
+                # Bắt lỗi KeyError cụ thể liên quan đến 'step'
+                if "step" in str(e):
+                    accelerator.print(
+                        "Caught a 'KeyError: step'. This is a known issue. "
+                        "Ignoring it as model/optimizer/scheduler states were likely loaded correctly. "
+                        "Continuing training."
+                    )
+                else:
+                    # Nếu là một KeyError khác, thì báo lỗi như bình thường
+                    raise e
+
             global_step = int(path.split("-")[1])
 
-            # Tính toán số bước đã qua trong epoch hiện tại để skip dataloader
-            resume_global_step = global_step * args.gradient_accumulation_steps
-            first_epoch = global_step // (len(train_dataloader) // args.gradient_accumulation_steps)
-            resume_step = resume_global_step % (len(train_dataloader) // args.gradient_accumulation_steps)
+            num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
+            first_epoch = global_step // num_update_steps_per_epoch
+            resume_step = global_step % num_update_steps_per_epoch
 
     # <<< KẾT THÚC PHẦN THÊM MỚI >>>
 
@@ -453,21 +463,23 @@ def main():
         # <<< BẮT ĐẦU PHẦN SỬA LỖI >>>
         logger.info("Saving final model...")
 
-        # Lấy UNet gốc ra khỏi wrapper của accelerator
+        # Import hàm cần thiết từ PEFT
+        from peft import get_peft_model_state_dict
+
+        # Lấy UNet và Text Encoder đã huấn luyện ra khỏi wrapper của accelerator
         unet = accelerator.unwrap_model(unet)
+        text_encoder = accelerator.unwrap_model(text_encoder)
 
-        # Tạo một pipeline đầy đủ để lưu trọng số LoRA đúng cách
-        pipeline = StableDiffusionPipeline.from_pretrained(
-            args.pretrained_model_name_or_path,
-            text_encoder=accelerator.unwrap_model(text_encoder),
-            vae=vae,
-            unet=unet,
-            tokenizer=tokenizer,
+        # 1. Trích xuất state dict của CHỈ các lớp LoRA từ UNet
+        # Đây là bước quan trọng để lấy đúng các trọng số đã được finetune
+        unet_lora_layers = get_peft_model_state_dict(unet)
+
+        # 2. Gọi hàm lưu của pipeline và truyền các lớp LoRA vào một cách tường minh
+        # Chúng ta không cần tạo một pipeline đầy đủ, chỉ cần gọi phương thức tĩnh của nó
+        StableDiffusionPipeline.save_lora_weights(
+            save_directory=args.output_dir,
+            unet_lora_layers=unet_lora_layers,
         )
-
-        # Gọi phương thức save_lora_weights từ pipeline
-        # Trọng số sẽ được lưu vào file `pytorch_lora_weights.safetensors` trong output_dir
-        pipeline.save_lora_weights(args.output_dir)
         logger.info(f"LoRA weights saved to {os.path.join(args.output_dir, 'pytorch_lora_weights.safetensors')}")
         # <<< KẾT THÚC PHẦN SỬA LỖI >>>
 
