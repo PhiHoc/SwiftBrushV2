@@ -198,7 +198,7 @@ if __name__ == "__main__":
     parser.add_argument("--textual_inversion_embeds_path", type=str, required=True,
                         help="Path to the learned TI embeddings (.bin).")
     parser.add_argument("--output_path", type=str, required=True, help="The output directory for synthetic data.")
-    parser.add_argument("--dataset", type=str, default="bear", help="Dataset name for metadata.")
+    parser.add_argument("--dataset", type=str, required=True, help="Dataset name for metadata.")
     parser.add_argument("--train_data_dir", type=str, required=True, help="A folder containing the training data.")
     parser.add_argument("--seed", type=int, default=42, help="Random seed.")
     parser.add_argument("--examples_per_class", type=int, default=-1,

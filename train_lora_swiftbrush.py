@@ -40,7 +40,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Simple example of a training script.")
     parser.add_argument("--pretrained_model_name_or_path", type=str, default="stabilityai/sd-turbo", required=True)
     parser.add_argument("--swiftbrush_checkpoint_path", type=str, required=True)
-    parser.add_argument("--dataset_name", type=str, default="bear")
+    parser.add_argument("--dataset_name", type=str, required=True)
     parser.add_argument("--train_data_dir", type=str, required=True)
     parser.add_argument("--output_dir", type=str, default="swiftbrush-finetuned-lora")
     parser.add_argument("--resume_from_checkpoint", type=str, default="latest")

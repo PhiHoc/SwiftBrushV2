@@ -80,7 +80,6 @@ def sample_func(args, in_queue, gpu_id, process_id):
 
     train_dataset = DATASET_NAME_MAPPING[args.dataset](split="train", seed=args.seed, examples_per_class=args.examples_per_class, image_train_dir=args.train_data_dir)
     name2placeholder = {name: f"<class_{i}>" for i, name in enumerate(train_dataset.class_names)}
-
     while True:
         try:
             tasks = [in_queue.get(timeout=5) for _ in range(args.batch_size)]
@@ -91,13 +90,14 @@ def sample_func(args, in_queue, gpu_id, process_id):
         for index, source_context_label, target_label in tasks:
             target_name = train_dataset.label2class[target_label]
             target_placeholder = name2placeholder[target_name]
+            dataset_name = args.dataset.replace("_", " ")
             if args.sample_strategy == "one-step-aug":
-                prompt = f"a photo of a {target_placeholder}"
+                prompt = f"a photo of a {target_placeholder} {dataset_name}"
             elif args.sample_strategy == "one-step-mix":
                 source_context_name = train_dataset.label2class[source_context_label]
-                prompt = f"a photo of a {target_placeholder}, in the environment of a {source_context_name}"
+                prompt = f"a photo of a {target_placeholder} {dataset_name}, in the environment of a {source_context_name}"
             else:
-                prompt = f"a photo of a {target_placeholder}"
+                prompt = f"a photo of a {target_placeholder} {dataset_name}"
 
             prompts.append(prompt)
             save_dir = os.path.join(args.output_path, "data", target_name.replace(" ", "_").replace("c/", "_"))
@@ -194,7 +194,7 @@ if __name__ == "__main__":
     parser.add_argument("--lora_weights_path", type=str, default=None)
     parser.add_argument("--textual_inversion_embeds_path", type=str, required=True)
     parser.add_argument("--output_path", type=str, required=True)
-    parser.add_argument("--dataset", type=str, default="bear")
+    parser.add_argument("--dataset", type=str, required=True)
     parser.add_argument("--train_data_dir", type=str, required=True)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--examples_per_class", type=int, default=-1)
