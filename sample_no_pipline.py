@@ -100,7 +100,7 @@ def sample_func(args, in_queue, gpu_id, process_id):
                 prompt = f"a photo of a {target_placeholder}"
 
             prompts.append(prompt)
-            save_dir = os.path.join(args.output_path, "data", target_name.replace(" ", "_").replace("/", "_"))
+            save_dir = os.path.join(args.output_path, "data", target_name.replace(" ", "_").replace("c/", "_"))
             os.makedirs(save_dir, exist_ok=True)
             save_name = f"{target_name.replace(' ', '_').replace('/', '_')}-{index:06d}.png"
             save_paths.append(os.path.join(save_dir, save_name))
@@ -113,7 +113,11 @@ def sample_func(args, in_queue, gpu_id, process_id):
             Image.fromarray(image).save(save_path)
 
 def main(args):
-    torch.multiprocessing.set_start_method("spawn")
+    try:
+        torch.multiprocessing.set_start_method("spawn")
+    except RuntimeError:
+        pass
+
     os.makedirs(args.output_path, exist_ok=True)
 
     train_dataset = DATASET_NAME_MAPPING[args.dataset](split="train", seed=args.seed, examples_per_class=args.examples_per_class, image_train_dir=args.train_data_dir)
