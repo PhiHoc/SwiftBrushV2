@@ -238,7 +238,7 @@ if __name__ == "__main__":
                         help="Đường dẫn đến file checkpoint để tiếp tục huấn luyện.")
 
     # Các tham số huấn luyện
-    parser.add_argument("-m", "--model", default="resnet50", choices=["resnet50", "vit_b_16"], help="Tên model.")
+    parser.add_argument("-m", "--model", default="resnet18", help="Tên model.")
     parser.add_argument("-ne", "--nepoch", type=int, default=100, help="Số lượng epoch.")
     parser.add_argument("-b", "--batch_size", default=64, type=int)
     parser.add_argument("--lr", default=0.01, type=float)
