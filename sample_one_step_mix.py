@@ -1,5 +1,3 @@
-# scripts/sample_one_step_mix.py (Hỗ trợ tùy chọn không tải LoRA)
-
 import argparse
 import os
 import random
@@ -19,15 +17,14 @@ from tqdm import tqdm
 from transformers import CLIPTextModel, CLIPTokenizer
 from diffusers import StableDiffusionPipeline, DDPMScheduler, AutoencoderKL, UNet2DConditionModel
 
-# Đảm bảo có thể import các module từ thư mục gốc của dự án
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 from dataset import DATASET_NAME_MAPPING
 
 os.environ["CURL_CA_BUNDLE"] = ""
 os.environ["WANDB_DISABLED"] = "true"
 
-
 class OneStepMixupPipeline:
+    # ... (Lớp này không thay đổi, giữ nguyên như cũ) ...
     def __init__(self, args, device):
         self.device = device
         self.args = args
@@ -35,54 +32,40 @@ class OneStepMixupPipeline:
 
     def _load_textual_inversion_embeds(self, tokenizer, text_encoder):
         if not os.path.exists(self.args.textual_inversion_embeds_path):
-            raise FileNotFoundError(
-                f"Textual Inversion embeds file not found at: {self.args.textual_inversion_embeds_path}")
-
+            raise FileNotFoundError(f"Textual Inversion embeds file not found at: {self.args.textual_inversion_embeds_path}")
         learned_embeds_dict = torch.load(self.args.textual_inversion_embeds_path, map_location="cpu")
         placeholder_tokens = learned_embeds_dict["placeholder_tokens"]
         learned_embeds = learned_embeds_dict["text_embeds"]
-
         tokenizer.add_tokens(placeholder_tokens)
         text_encoder.resize_token_embeddings(len(tokenizer))
         token_embeds = text_encoder.get_input_embeddings().weight.data
         placeholder_token_ids = tokenizer.convert_tokens_to_ids(placeholder_tokens)
-
         for token_id, embed in zip(placeholder_token_ids, learned_embeds):
             token_embeds[token_id] = embed
-
         print(f"Successfully loaded {len(placeholder_tokens)} textual inversion embeddings.")
         return tokenizer, text_encoder
 
     def _load_pipeline(self):
         weight_dtype = torch.float16
-
         tokenizer = CLIPTokenizer.from_pretrained(self.args.base_model_path, subfolder="tokenizer")
         text_encoder = CLIPTextModel.from_pretrained(self.args.base_model_path, subfolder="text_encoder")
         tokenizer, text_encoder = self._load_textual_inversion_embeds(tokenizer, text_encoder)
-
         vae = AutoencoderKL.from_pretrained(self.args.base_model_path, subfolder="vae")
         scheduler = DDPMScheduler.from_pretrained(self.args.base_model_path, subfolder="scheduler")
-
         print(f"Loading SwiftBrush UNet from: {self.args.swiftbrush_unet_path}")
         unet = UNet2DConditionModel.from_pretrained(self.args.swiftbrush_unet_path)
-
         pipe = StableDiffusionPipeline(
             vae=vae, text_encoder=text_encoder, tokenizer=tokenizer, unet=unet,
             scheduler=scheduler, safety_checker=None, feature_extractor=None,
         )
-
-        # --- THAY ĐỔI: TẢI LORA CÓ ĐIỀU KIỆN ---
         if self.args.lora_weights_path:
             if os.path.exists(self.args.lora_weights_path):
                 print(f"Loading LoRA weights from: {self.args.lora_weights_path}")
                 pipe.load_lora_weights(self.args.lora_weights_path)
             else:
-                print(
-                    f"Warning: LoRA path provided but file not found at '{self.args.lora_weights_path}'. Skipping LoRA loading.")
+                print(f"Warning: LoRA path provided but file not found at '{self.args.lora_weights_path}'. Skipping LoRA loading.")
         else:
             print("No LoRA path provided. Running with base UNet and Textual Inversion only.")
-        # --- KẾT THÚC THAY ĐỔI ---
-
         pipe.to(self.device, dtype=weight_dtype)
         return pipe
 
@@ -120,7 +103,19 @@ def sample_func(args, in_queue, gpu_id, process_id):
             target_name = train_dataset.label2class[target_label]
             source_name = train_dataset.label2class[source_label]
             target_placeholder = name2placeholder[target_name]
-            prompt = f"a photo of a {target_placeholder}"
+
+            # <<< THAY ĐỔI LOGIC TẠO PROMPT >>>
+            if args.sample_strategy == "one-step-aug":
+                # Chiến lược Aug: prompt đơn giản, tập trung vào lớp đích
+                prompt = f"a photo of a {target_placeholder}"
+            elif args.sample_strategy == "one-step-mix":
+                # Chiến lược Mix: prompt kết hợp ngữ cảnh từ lớp nguồn
+                # Chúng ta dùng tên của lớp nguồn để mô tả môi trường
+                prompt = f"a photo of a {target_placeholder}, in the environment of a {source_name}"
+            else:
+                prompt = f"a photo of a {target_placeholder}" # Mặc định
+            # <<< KẾT THÚC THAY ĐỔI >>>
+
             prompts.append(prompt)
             save_dir = os.path.join(args.output_path, "data", source_name.replace(" ", "_").replace("/", "_"))
             os.makedirs(save_dir, exist_ok=True)
@@ -135,52 +130,44 @@ def sample_func(args, in_queue, gpu_id, process_id):
             image.save(save_path)
         print(f"Process {process_id}: Saved {len(images)} images, last to {save_paths[-1]}")
 
-
+# ... (Hàm main và argparse không thay đổi, giữ nguyên như phiên bản trước) ...
 def main(args):
     torch.multiprocessing.set_start_method("spawn")
     os.makedirs(args.output_path, exist_ok=True)
-
     train_dataset = DATASET_NAME_MAPPING[args.dataset](
         split="train", seed=args.seed, examples_per_class=args.examples_per_class, image_train_dir=args.train_data_dir
     )
     num_classes = len(train_dataset.class_names)
     num_tasks = args.syn_dataset_mulitiplier * len(train_dataset)
-
     target_classes = []
     samples_per_class = num_tasks // num_classes
     target_classes.extend(list(range(num_classes)) * samples_per_class)
     target_classes.extend(random.sample(range(num_classes), num_tasks % num_classes))
     random.shuffle(target_classes)
-
     if args.sample_strategy == "one-step-mix":
         source_classes = random.choices(range(num_classes), k=num_tasks)
-        print("Using 'one-step-mix' strategy.")
+        print("Using 'one-step-mix' strategy with contextual prompts.")
     elif args.sample_strategy == "one-step-aug":
         source_classes = target_classes
-        print("Using 'one-step-aug' strategy.")
+        print("Using 'one-step-aug' strategy with simple prompts.")
     else:
         raise ValueError(f"Unsupported sample strategy: {args.sample_strategy}")
-
     in_queue = Queue()
     for i in range(num_tasks):
         in_queue.put((i, source_classes[i], target_classes[i]))
     print(f"Total tasks to generate: {in_queue.qsize()}")
-
     processes = []
     with tqdm(total=num_tasks, desc="Generating Images") as pbar:
         for process_id, gpu_id in enumerate(args.gpu_ids):
             process = Process(target=sample_func, args=(args, in_queue, gpu_id, process_id))
             process.start()
             processes.append(process)
-
         while any(p.is_alive() for p in processes):
             pbar.n = num_tasks - in_queue.qsize()
             pbar.refresh()
             time.sleep(1)
-
         for process in processes:
             process.join()
-
     print("Generation complete. Generating meta.csv...")
     rootdir = os.path.join(args.output_path, "data")
     pattern_level_2 = r"(.+)-(\d+).png"
@@ -197,39 +184,25 @@ def main(args):
                 data_dict["Second Directory"].append(target_dir_name)
                 data_dict["Number"].append(num)
                 data_dict["Path"].append(os.path.join(dir_name, file_name))
-
     df = pd.DataFrame(data_dict)
     csv_path = os.path.join(args.output_path, "meta.csv")
     df.to_csv(csv_path, index=False)
     print(f"meta.csv saved to {csv_path}")
 
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser("One-Step Mixup/Augmentation Sampling Script")
-    parser.add_argument("--sample_strategy", type=str, default="one-step-mix", choices=["one-step-mix", "one-step-aug"],
-                        help="Sampling strategy: inter-class ('mix') or intra-class ('aug').")
-
-    parser.add_argument("--base_model_path", type=str, default="stabilityai/sd-turbo",
-                        help="Path to the base one-step model.")
-    parser.add_argument("--swiftbrush_unet_path", type=str, required=True,
-                        help="Path to the pre-trained SwiftBrush UNet checkpoint directory.")
-
-    # --- THAY ĐỔI: LORA PATH LÀ TÙY CHỌN ---
-    parser.add_argument("--lora_weights_path", type=str, default=None,
-                        help="Optional path to the fine-tuned LoRA weights (.safetensors).")
-    # --- KẾT THÚC THAY ĐỔI ---
-
-    parser.add_argument("--textual_inversion_embeds_path", type=str, required=True,
-                        help="Path to the learned TI embeddings (.bin).")
+    parser.add_argument("--sample_strategy", type=str, default="one-step-mix", choices=["one-step-mix", "one-step-aug"], help="Sampling strategy: inter-class ('mix') or intra-class ('aug').")
+    parser.add_argument("--base_model_path", type=str, default="stabilityai/sd-turbo", help="Path to the base one-step model.")
+    parser.add_argument("--swiftbrush_unet_path", type=str, required=True, help="Path to the pre-trained SwiftBrush UNet checkpoint directory.")
+    parser.add_argument("--lora_weights_path", type=str, default=None, help="Optional path to the fine-tuned LoRA weights (.safetensors).")
+    parser.add_argument("--textual_inversion_embeds_path", type=str, required=True, help="Path to the learned TI embeddings (.bin).")
     parser.add_argument("--output_path", type=str, required=True, help="The output directory for synthetic data.")
     parser.add_argument("--dataset", type=str, default="bear", help="Dataset name for metadata.")
     parser.add_argument("--train_data_dir", type=str, required=True, help="A folder containing the training data.")
     parser.add_argument("--seed", type=int, default=42, help="Random seed.")
-    parser.add_argument("--examples_per_class", type=int, default=-1,
-                        help="Examples per class in the original dataset.")
+    parser.add_argument("--examples_per_class", type=int, default=-1, help="Examples per class in the original dataset.")
     parser.add_argument("--batch_size", type=int, default=4, help="Batch size per GPU.")
     parser.add_argument("--gpu_ids", type=int, nargs="+", default=[0], help="GPU ids.")
     parser.add_argument("--syn_dataset_mulitiplier", type=int, default=5, help="Multiplier for synthetic dataset size.")
-
     args = parser.parse_args()
     main(args)
