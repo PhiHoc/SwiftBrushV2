@@ -202,4 +202,10 @@ if __name__ == "__main__":
     parser.add_argument("--gpu_ids", type=int, nargs="+", default=[0])
     parser.add_argument("--syn_dataset_mulitiplier", type=int, default=1)
     args = parser.parse_args()
+
+    print("=" * 40)
+    for k, v in vars(args).items():
+        print(f"  - {k}: {v}")
+    print("=" * 40)
+
     main(args)
