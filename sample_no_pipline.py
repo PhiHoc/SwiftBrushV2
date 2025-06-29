@@ -140,7 +140,7 @@ def main(args):
 
     processes = []
     with tqdm(total=len(tasks), desc="Generating Images") as pbar:
-        for process_id, gpu_id in enumerate(args.gpu_ids if torch.cuda.is_available() else [None] * args.num_processes):
+        for process_id, gpu_id in enumerate(args.gpu_ids if torch.cuda.is_available() else [None] * 1):
             process = Process(target=sample_func, args=(args, in_queue, gpu_id, process_id, environments))
             process.start()
             processes.append(process)
