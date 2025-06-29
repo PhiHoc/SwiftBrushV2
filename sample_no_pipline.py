@@ -97,7 +97,7 @@ def sample_func(args, in_queue, gpu_id, process_id, environments):
             dataset_name = args.dataset.replace("_", " ")
 
             environment = random.choice(environments) if environments else ""
-            prompt = f"a photo of a {target_placeholder} {dataset_name} {environment}".strip()
+            prompt = f"a photo of a {target_placeholder} {dataset_name}, {environment}".strip()
 
             prompts.append(prompt)
             save_dir = os.path.join(args.output_path, "data", target_name.replace(" ", "_").replace("/", "_"))
@@ -189,5 +189,3 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     main(args)
-
-    #Create a diverse, detailed list of short environment descriptions for real-world habitats where {subject} species live. Each item should only describe the environment itself, starting directly with phrases like 'in...', 'beside...', 'under...', etc., without mentioning the {subject}. These environment descriptions will be combined with a constant {subject} prompt and fed to a diffusion model to generate synthetic images for classification training. The goal is to vary the surroundings while keeping the {subject} consistent, so the model learns to classify the {subject} regardless of background
