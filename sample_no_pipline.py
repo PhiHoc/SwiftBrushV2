@@ -63,7 +63,10 @@ def generate_image(prompt, tokenizer, text_encoder, unet, vae, scheduler, device
     return image
 
 def sample_func(args, in_queue, gpu_id, process_id, environments):
-    device = f"cuda:{gpu_id}"
+    if torch.cuda.is_available() and gpu_id is not None:
+        device = f"cuda:{gpu_id}"
+    else:
+        device = "cpu"
     torch.manual_seed(args.seed + process_id)
     np.random.seed(args.seed + process_id)
     random.seed(args.seed + process_id)
@@ -137,7 +140,7 @@ def main(args):
 
     processes = []
     with tqdm(total=len(tasks), desc="Generating Images") as pbar:
-        for process_id, gpu_id in enumerate(args.gpu_ids):
+        for process_id, gpu_id in enumerate(args.gpu_ids if torch.cuda.is_available() else [None] * args.num_processes):
             process = Process(target=sample_func, args=(args, in_queue, gpu_id, process_id, environments))
             process.start()
             processes.append(process)
