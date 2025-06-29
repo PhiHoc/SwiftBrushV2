@@ -125,7 +125,7 @@ def main(args):
             total_samples += inputs.size(0)
             pbar.set_postfix(loss=f"{total_loss / total_samples:.4f}", acc=f"{total_correct / total_samples:.4f}")
 
-        subset_ratio = 0.3
+        subset_ratio = args.subset_ratio
         full_eval_interval = 5
 
         if epoch % full_eval_interval == 0:
@@ -167,6 +167,7 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--real_data_dir", type=str, required=True)
+    parser.add_argument("--subset_ratio", type=str, default=0.3)
     parser.add_argument("--test_data_dir", type=str, required=True)
     parser.add_argument("--synthetic_data_dir", type=str, required=True)
     parser.add_argument("--output_dir", type=str, required=True)
