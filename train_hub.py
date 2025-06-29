@@ -98,7 +98,11 @@ def main(args):
     test_loader_full = DataLoader(test_set, batch_size=args.batch_size, shuffle=False, num_workers=4,
                                   collate_fn=collate_fn, pin_memory=True, persistent_workers=True, prefetch_factor=2)
 
-    scaler = torch.cuda.amp.GradScaler()  # Use mixed precision to save memory and speed up
+    use_amp = torch.cuda.is_available()
+    if torch.cuda.is_available():
+        torch.backends.cudnn.benchmark = True
+
+    scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
 
     best_accuracy = 0.0
     patience_counter = 0
@@ -112,7 +116,7 @@ def main(args):
             if inputs is None: continue
             inputs, labels = inputs.to(device), labels.to(device)
             optimizer.zero_grad()
-            with torch.cuda.amp.autocast():  # Mixed precision training
+            with torch.cuda.amp.autocast(enabled=use_amp):
                 outputs = net(inputs)
                 loss = criterion(outputs, labels)
             scaler.scale(loss).backward()
