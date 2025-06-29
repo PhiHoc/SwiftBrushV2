@@ -62,7 +62,7 @@ def generate_image(prompt, tokenizer, text_encoder, unet, vae, scheduler, device
         image = (vae.decode(pred_original_sample).sample + 1) / 2
     return image
 
-def sample_func(args, in_queue, gpu_id, process_id):
+def sample_func(args, in_queue, gpu_id, process_id, environments):
     device = f"cuda:{gpu_id}"
     torch.manual_seed(args.seed + process_id)
     np.random.seed(args.seed + process_id)
@@ -80,6 +80,7 @@ def sample_func(args, in_queue, gpu_id, process_id):
 
     train_dataset = DATASET_NAME_MAPPING[args.dataset](split="train", seed=args.seed, examples_per_class=args.examples_per_class, image_train_dir=args.train_data_dir)
     name2placeholder = {name: f"<class_{i}>" for i, name in enumerate(train_dataset.class_names)}
+
     while True:
         try:
             tasks = [in_queue.get(timeout=5) for _ in range(args.batch_size)]
@@ -87,25 +88,19 @@ def sample_func(args, in_queue, gpu_id, process_id):
             break
 
         prompts, save_paths = [], []
-        for index, source_context_label, target_label in tasks:
+        for index, target_label in tasks:
             target_name = train_dataset.label2class[target_label]
             target_placeholder = name2placeholder[target_name]
             dataset_name = args.dataset.replace("_", " ")
-            if args.sample_strategy == "one-step-aug":
-                prompt = f"a photo of a {target_placeholder} {dataset_name}"
-            elif args.sample_strategy == "one-step-mix":
-                source_context_name = train_dataset.label2class[source_context_label]
-                prompt = f"a photo of a {target_placeholder} {dataset_name}, in the environment of a {source_context_name}"
-            else:
-                prompt = f"a photo of a {target_placeholder} {dataset_name}"
+
+            environment = random.choice(environments) if environments else ""
+            prompt = f"a photo of a {target_placeholder} {dataset_name} {environment}".strip()
 
             prompts.append(prompt)
-            save_dir = os.path.join(args.output_path, "data", target_name.replace(" ", "_").replace("c/", "_"))
+            save_dir = os.path.join(args.output_path, "data", target_name.replace(" ", "_").replace("/", "_"))
             os.makedirs(save_dir, exist_ok=True)
             save_name = f"{target_name.replace(' ', '_').replace('/', '_')}-{index:06d}.png"
             save_paths.append(os.path.join(save_dir, save_name))
-
-        if all(os.path.exists(p) for p in save_paths): continue
 
         for prompt, save_path in zip(prompts, save_paths):
             image = generate_image(prompt, tokenizer, text_encoder, unet, vae, scheduler, device)
@@ -120,37 +115,30 @@ def main(args):
 
     os.makedirs(args.output_path, exist_ok=True)
 
+    environments = []
+    if args.environment_file and os.path.exists(args.environment_file):
+        with open(args.environment_file, "r") as f:
+            environments = [line.strip() for line in f if line.strip()]
+
     train_dataset = DATASET_NAME_MAPPING[args.dataset](split="train", seed=args.seed, examples_per_class=args.examples_per_class, image_train_dir=args.train_data_dir)
     num_classes = len(train_dataset.class_names)
     num_real_images = len(train_dataset) if args.examples_per_class == -1 else args.examples_per_class * num_classes
     num_synthetic_tasks = int(args.syn_dataset_mulitiplier * num_real_images)
     samples_per_class = num_synthetic_tasks // num_classes
 
-    tasks = []
-    all_class_indices = list(range(num_classes))
-    for target_idx in all_class_indices:
-        for _ in range(samples_per_class):
-            source_context_idx = target_idx if args.sample_strategy == 'one-step-aug' else random.choice(all_class_indices)
-            tasks.append((source_context_idx, target_idx))
-
+    tasks = [(i, target_idx) for target_idx in range(num_classes) for i in range(samples_per_class)]
     remainder = num_synthetic_tasks % num_classes
-    if remainder > 0:
-        extra_targets = random.choices(all_class_indices, k=remainder)
-        for target_idx in extra_targets:
-            source_context_idx = target_idx if args.sample_strategy == 'one-step-aug' else random.choice(all_class_indices)
-            tasks.append((source_context_idx, target_idx))
+    tasks += [(len(tasks) + i, random.choice(range(num_classes))) for i in range(remainder)]
     random.shuffle(tasks)
 
     in_queue = Queue()
-    for i, (source_context_label, target_label) in enumerate(tasks):
-        in_queue.put((i, source_context_label, target_label))
-
-    print(f"Total tasks created: {len(tasks)}. Enqueuing...")
+    for task in tasks:
+        in_queue.put(task)
 
     processes = []
     with tqdm(total=len(tasks), desc="Generating Images") as pbar:
         for process_id, gpu_id in enumerate(args.gpu_ids):
-            process = Process(target=sample_func, args=(args, in_queue, gpu_id, process_id))
+            process = Process(target=sample_func, args=(args, in_queue, gpu_id, process_id, environments))
             process.start()
             processes.append(process)
 
@@ -166,29 +154,22 @@ def main(args):
     print("Generation complete. Generating meta.csv...")
     rootdir = os.path.join(args.output_path, "data")
     data_dict = defaultdict(list)
-    if not os.path.exists(rootdir) or not os.listdir(rootdir):
-        print("!!! WARNING: 'data' directory is empty or does not exist. No images were generated.")
-        df = pd.DataFrame({'Path': [], 'Target Class': []})
-    else:
-        for dir_name in os.listdir(rootdir):
-            class_dir = os.path.join(rootdir, dir_name)
-            if not os.path.isdir(class_dir): continue
-            target_dir_name = dir_name.replace("_", " ")
-            for file_name in os.listdir(class_dir):
-                path = os.path.join(dir_name, file_name)
-                data_dict["Path"].append(path)
-                data_dict["Target Class"].append(target_dir_name)
-        df = pd.DataFrame(data_dict)
-        if not df.empty:
-            df = df.sort_values(by=["Target Class", "Path"]).reset_index(drop=True)
+    for dir_name in os.listdir(rootdir):
+        class_dir = os.path.join(rootdir, dir_name)
+        if not os.path.isdir(class_dir): continue
+        target_dir_name = dir_name.replace("_", " ")
+        for file_name in os.listdir(class_dir):
+            path = os.path.join(dir_name, file_name)
+            data_dict["Path"].append(path)
+            data_dict["Target Class"].append(target_dir_name)
 
+    df = pd.DataFrame(data_dict).sort_values(by=["Target Class", "Path"]).reset_index(drop=True)
     csv_path = os.path.join(args.output_path, "meta.csv")
     df.to_csv(csv_path, index=False)
     print(f"meta.csv saved to {csv_path}")
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser("One-Step Mixup/Augmentation Sampling Script without Pipeline")
-    parser.add_argument("--sample_strategy", type=str, default="one-step-mix", choices=["one-step-mix", "one-step-aug"])
+    parser = argparse.ArgumentParser("Diverse Environment Sampling Script")
     parser.add_argument("--base_model_path", type=str, default="stabilityai/sd-turbo")
     parser.add_argument("--swiftbrush_unet_path", type=str, required=True)
     parser.add_argument("--lora_weights_path", type=str, default=None)
@@ -196,6 +177,7 @@ if __name__ == "__main__":
     parser.add_argument("--output_path", type=str, required=True)
     parser.add_argument("--dataset", type=str, required=True)
     parser.add_argument("--train_data_dir", type=str, required=True)
+    parser.add_argument("--environment_file", type=str, default=None, help="Path to txt file containing environment descriptions.")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--examples_per_class", type=int, default=-1)
     parser.add_argument("--batch_size", type=int, default=4)
@@ -203,9 +185,6 @@ if __name__ == "__main__":
     parser.add_argument("--syn_dataset_mulitiplier", type=int, default=1)
     args = parser.parse_args()
 
-    print("=" * 40)
-    for k, v in vars(args).items():
-        print(f"  - {k}: {v}")
-    print("=" * 40)
-
     main(args)
+
+    #Create a diverse, detailed list of short environment descriptions for real-world habitats where {subject} species live. Each item should only describe the environment itself, starting directly with phrases like 'in...', 'beside...', 'under...', etc., without mentioning the {subject}. These environment descriptions will be combined with a constant {subject} prompt and fed to a diffusion model to generate synthetic images for classification training. The goal is to vary the surroundings while keeping the {subject} consistent, so the model learns to classify the {subject} regardless of background

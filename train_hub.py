@@ -136,7 +136,6 @@ def main(args):
     optimizer = torch.optim.SGD(net.parameters(), lr=args.lr, momentum=0.9, weight_decay=args.weight_decay)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.nepoch)
 
-    # <<< THAY ĐỔI: KHỞI TẠO CÁC DANH SÁCH METRICS >>>
     start_epoch = 0
     best_accuracy = 0.0
     train_losses, train_accuracies, eval_losses, eval_accuracies = [], [], [], []
