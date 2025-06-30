@@ -175,7 +175,7 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--real_data_dir", type=str, required=True)
-    parser.add_argument("--subset_ratio", type=str, default=0.3)
+    parser.add_argument("--subset_ratio", type=float, default=1)
     parser.add_argument("--test_data_dir", type=str, required=True)
     parser.add_argument("--synthetic_data_dir", type=str, required=True)
     parser.add_argument("--output_dir", type=str, required=True)
