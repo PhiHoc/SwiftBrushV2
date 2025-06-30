@@ -64,14 +64,19 @@ def main(args):
 
     torch.backends.cudnn.benchmark = True  # Enable benchmark mode for faster convolution selection
 
+    temp_dataset = datasets.ImageFolder(root=args.real_data_dir)
+    class_to_idx = temp_dataset.class_to_idx
+
+    nb_class = len(class_to_idx)
+
     if args.model == "resnet18":
-        net = resnet18(weights=None); net.fc = nn.Linear(net.fc.in_features, args.num_classes)
+        net = resnet18(weights=None); net.fc = nn.Linear(net.fc.in_features, nb_class)
     elif args.model == "resnet18pretrain":
-        net = resnet18(weights=ResNet18_Weights.IMAGENET1K_V1); net.fc = nn.Linear(net.fc.in_features, args.num_classes)
+        net = resnet18(weights=ResNet18_Weights.IMAGENET1K_V1); net.fc = nn.Linear(net.fc.in_features, nb_class)
     elif args.model == "resnet50":
-        net = resnet50(weights=ResNet50_Weights.IMAGENET1K_V2); net.fc = nn.Linear(net.fc.in_features, args.num_classes)
+        net = resnet50(weights=ResNet50_Weights.IMAGENET1K_V2); net.fc = nn.Linear(net.fc.in_features, nb_class)
     elif args.model == "vit_b_16":
-        net = vit_b_16(weights=ViT_B_16_Weights.IMAGENET1K_SWAG_E2E_V1); net.heads.head = nn.Linear(net.heads.head.in_features, args.num_classes)
+        net = vit_b_16(weights=ViT_B_16_Weights.IMAGENET1K_SWAG_E2E_V1); net.heads.head = nn.Linear(net.heads.head.in_features, nb_class)
     else:
         raise ValueError("Model not supported")
 
@@ -82,8 +87,7 @@ def main(args):
     optimizer = torch.optim.SGD(net.parameters(), lr=args.lr, momentum=0.9, weight_decay=args.weight_decay)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.nepoch)
 
-    temp_dataset = datasets.ImageFolder(root=args.real_data_dir)
-    class_to_idx = temp_dataset.class_to_idx
+
 
     train_set = CombinedDataset(args.real_data_dir, args.synthetic_data_dir, class_to_idx, args.resize, args.crop_size, is_train=True)
     test_set = CombinedDataset(args.test_data_dir, None, class_to_idx, args.resize, args.crop_size, is_train=False)
@@ -176,7 +180,6 @@ if __name__ == "__main__":
     parser.add_argument("--synthetic_data_dir", type=str, required=True)
     parser.add_argument("--output_dir", type=str, required=True)
     parser.add_argument("--model", type=str, default="resnet18")
-    parser.add_argument("--num_classes", type=int, required=True)
     parser.add_argument("--nepoch", type=int, default=100)
     parser.add_argument("--batch_size", type=int, default=64)
     parser.add_argument("--lr", type=float, default=0.01)
