@@ -166,7 +166,7 @@ def main(args):
         else:
             patience_counter += 1
 
-        if patience_counter >= 10:
+        if patience_counter >= 20:
             print(f"Early stopping at epoch {epoch}")
             break
 
