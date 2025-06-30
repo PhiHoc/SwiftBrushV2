@@ -11,9 +11,6 @@ from PIL import Image
 from dataset.base import HugFewShotDataset
 from dataset.template import IMAGENET_TEMPLATES_TINY
 
-HUG_LOCAL_IMAGE_TRAIN_DIR = "/content/drive/MyDrive/RareAnimal/Python/diffmix"
-
-
 class PythonHugDataset(HugFewShotDataset):
     super_class_name = "python"
 
@@ -22,7 +19,8 @@ class PythonHugDataset(HugFewShotDataset):
         *args,
         split: str = "train",
         seed: int = 0,
-        image_train_dir: str = HUG_LOCAL_IMAGE_TRAIN_DIR,
+        image_train_dir: str = None,
+        image_test_dir: str = None,
         examples_per_class: int = -1,
         synthetic_probability: float = 0.5,
         return_onehot: bool = False,
@@ -45,7 +43,11 @@ class PythonHugDataset(HugFewShotDataset):
             **kwargs,
         )
 
-        dataset = load_dataset("imagefolder", data_dir=image_train_dir)["train"]
+        if split == "train":
+            dataset = load_dataset(image_train_dir, split="train")
+        else:
+            dataset = load_dataset(image_test_dir, split="train")
+    
         random.seed(seed)
         np.random.seed(seed)
 
@@ -103,7 +105,7 @@ class PythonHugDatasetForT2I(torch.utils.data.Dataset):
         *args,
         split: str = "train",
         seed: int = 0,
-        image_train_dir: str = HUG_LOCAL_IMAGE_TRAIN_DIR,
+        image_train_dir: str = None,
         max_train_samples: int = -1,
         class_prompts_ratio: float = 0.5,
         resolution: int = 512,
