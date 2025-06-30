@@ -138,6 +138,67 @@ def sample_func(args, in_queue, gpu_id, process_id, environments):
             image = image.mul(255).clamp(0, 255).byte().cpu().squeeze(0).permute(1, 2, 0).numpy()
             Image.fromarray(image).save(save_path)
 
+def main(args):
+    try:
+        torch.multiprocessing.set_start_method("spawn")
+    except RuntimeError:
+        pass
+
+    os.makedirs(args.output_path, exist_ok=True)
+
+    environments = []
+    if args.environment_file and os.path.exists(args.environment_file):
+        with open(args.environment_file, "r") as f:
+            environments = [line.strip() for line in f if line.strip()]
+
+    train_dataset = DATASET_NAME_MAPPING[args.dataset](split="train", seed=args.seed, examples_per_class=args.examples_per_class, image_train_dir=args.train_data_dir)
+    num_classes = len(train_dataset.class_names)
+    num_real_images = len(train_dataset) if args.examples_per_class == -1 else args.examples_per_class * num_classes
+    num_synthetic_tasks = int(args.syn_dataset_mulitiplier * num_real_images)
+    samples_per_class = num_synthetic_tasks // num_classes
+
+    tasks = [(i, target_idx) for target_idx in range(num_classes) for i in range(samples_per_class)]
+    remainder = num_synthetic_tasks % num_classes
+    tasks += [(len(tasks) + i, random.choice(range(num_classes))) for i in range(remainder)]
+    random.shuffle(tasks)
+
+    in_queue = Queue()
+    for task in tasks:
+        in_queue.put(task)
+
+    processes = []
+    with tqdm(total=len(tasks), desc="Generating Images") as pbar:
+        for process_id, gpu_id in enumerate(args.gpu_ids if torch.cuda.is_available() else [None] * 1):
+            process = Process(target=sample_func, args=(args, in_queue, gpu_id, process_id, environments))
+            process.start()
+            processes.append(process)
+
+        initial_tasks = len(tasks)
+        while any(p.is_alive() for p in processes):
+            pbar.n = initial_tasks - in_queue.qsize()
+            pbar.refresh()
+            time.sleep(1)
+        pbar.n = initial_tasks
+        pbar.refresh()
+        for p in processes: p.join()
+
+    print("Generation complete. Generating meta.csv...")
+    rootdir = os.path.join(args.output_path, "data")
+    data_dict = defaultdict(list)
+    for dir_name in os.listdir(rootdir):
+        class_dir = os.path.join(rootdir, dir_name)
+        if not os.path.isdir(class_dir): continue
+        target_dir_name = dir_name.replace("_", " ")
+        for file_name in os.listdir(class_dir):
+            path = os.path.join(dir_name, file_name)
+            data_dict["Path"].append(path)
+            data_dict["Target Class"].append(target_dir_name)
+
+    df = pd.DataFrame(data_dict).sort_values(by=["Target Class", "Path"]).reset_index(drop=True)
+    csv_path = os.path.join(args.output_path, "meta.csv")
+    df.to_csv(csv_path, index=False)
+    print(f"meta.csv saved to {csv_path}")
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser("Diverse Environment Sampling Script")
     parser.add_argument("--base_model_path", type=str, default="stabilityai/sd-turbo")
@@ -154,5 +215,4 @@ if __name__ == "__main__":
     parser.add_argument("--gpu_ids", type=int, nargs="+", default=[0])
     parser.add_argument("--syn_dataset_mulitiplier", type=int, default=1)
     args = parser.parse_args()
-
     main(args)
