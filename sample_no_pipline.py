@@ -97,7 +97,7 @@ def sample_func(args, in_queue, gpu_id, process_id, environments):
             dataset_name = args.dataset.replace("_", " ")
 
             environment = random.choice(environments) if environments else ""
-            prompt = f"a photo of a {target_placeholder}".strip()
+            prompt = f"a photo of a {target_placeholder}, {environment}".strip()
             print(prompt)
 
             prompts.append(prompt)
