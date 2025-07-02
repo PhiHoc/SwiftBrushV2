@@ -110,12 +110,15 @@ def main():
         )
     placeholder_tokens = [PLACEHOLDER_TOKEN_TEMPLATE.format(i) for i in range(train_dataset.num_classes)]
     tokenizer.add_tokens(placeholder_tokens)
-    placeholder_tokens = [PLACEHOLDER_TOKEN_TEMPLATE.format(i) for i in range(train_dataset.num_classes)]
-    tokenizer.add_tokens(placeholder_tokens)
     placeholder_token_ids = tokenizer.convert_tokens_to_ids(placeholder_tokens)
-    name2placeholder = {name: placeholder for name, placeholder in zip(train_dataset.class_names, placeholder_tokens)}
-    train_dataset.name2placeholder = name2placeholder
+    train_dataset.name2placeholder = {name: placeholder for name, placeholder in
+                                      zip(train_dataset.class_names, placeholder_tokens)}
     text_encoder.resize_token_embeddings(len(tokenizer))
+    token_embeds = text_encoder.get_input_embeddings().weight.data
+    initializer_token_id = tokenizer.convert_tokens_to_ids(args.dataset_name)
+    with torch.no_grad():
+        for token_id in placeholder_token_ids:
+            token_embeds[token_id] = token_embeds[initializer_token_id].clone()
     text_encoder.text_model.embeddings.token_embedding.requires_grad_(True)
 
     lora_config = LoraConfig(
