@@ -116,6 +116,9 @@ def main():
     text_encoder.resize_token_embeddings(len(tokenizer))
     token_embeds = text_encoder.get_input_embeddings().weight.data
     initializer_token_id = tokenizer.convert_tokens_to_ids(args.dataset_name)
+    if initializer_token_id == tokenizer.unk_token_id:
+        raise ValueError(f"The dataset_name '{args.dataset_name}' is not a valid token in the tokenizer.")
+
     with torch.no_grad():
         for token_id in placeholder_token_ids:
             token_embeds[token_id] = token_embeds[initializer_token_id].clone()
