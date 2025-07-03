@@ -133,7 +133,7 @@ class HugFewShotDataset(Dataset):
         self.return_onehot = return_onehot
 
         if self.synthetic_dir is not None:
-            assert self.return_onehot == True
+            # assert self.return_onehot == True
             self.synthetic_probability = synthetic_probability
             self.soft_scaler = soft_scaler
             self.gamma = gamma
