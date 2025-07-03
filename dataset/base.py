@@ -78,7 +78,7 @@ class SyntheticDataset(Dataset):
         self.meta_df = pd.concat(meta_df_list).reset_index(drop=True)
 
         self.syn_nums = len(self.meta_df)
-        self.class_names = list(set(self.meta_df["First Directory"].values))
+        self.class_names = list(set(self.meta_df["Target Class"].values))
         print(f"Syn numbers: {self.syn_nums}\n")
 
     def get_syn_item_raw(self, idx: int):
@@ -236,20 +236,32 @@ class HugFewShotDataset(Dataset):
 
         return path, onehot_label
 
-    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, int]:
+    def __getitem__(self, idx: int) -> dict:
+        # Logic xác suất để chọn giữa ảnh thật và ảnh giả
+        use_synthetic = self.synthetic_dir is not None and np.random.uniform() < self.synthetic_probability
 
-        if (
-            self.synthetic_dir is not None
-            and np.random.uniform() < self.synthetic_probability
-        ):
-            syn_idx = np.random.choice(self.syn_nums)
-            path, label = self.get_syn_item(syn_idx)
-            image = Image.open(path).convert("RGB")
-        else:
-            image = self.get_image_by_idx(idx)
-            label = self.get_label_by_idx(idx)
+        try:
+            if use_synthetic:
+                # === LOGIC MỚI CHO ẢNH GIẢ ===
+                # 1. Chọn ngẫu nhiên một ảnh giả từ metadata
+                syn_idx = np.random.choice(self.syn_nums)
+                df_data = self.meta_df.iloc[syn_idx]
 
-        if self.return_onehot:
-            if isinstance(label, (int, np.int64)):
-                label = onehot(self.num_classes, label)
-        return dict(pixel_values=self.transform(image), label=label)
+                # 2. Đọc đường dẫn và tên lớp từ cột "Path" và "Target Class"
+                image_path = df_data["Path"]  # Đường dẫn này đã là đường dẫn đầy đủ
+                class_name = df_data["Target Class"]  # Đọc đúng tên cột
+
+                # 3. Lấy chỉ số (label) của lớp
+                label = self.class2label[class_name]
+                image = Image.open(image_path).convert("RGB")
+            else:
+                image = self.get_image_by_idx(idx)
+                label = self.get_label_by_idx(idx)
+
+            # Trả về kết quả sau khi áp dụng transform
+            return dict(pixel_values=self.transform(image), label=label)
+
+        except Exception as e:
+            # Nếu có lỗi khi đọc ảnh (vd: ảnh bị hỏng), bỏ qua mẫu này
+            # print(f"Warning: Skipping problematic image at index {idx}. Error: {e}")
+            return None
