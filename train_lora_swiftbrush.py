@@ -41,6 +41,7 @@ def parse_args():
     parser.add_argument("--pretrained_model_name_or_path", type=str, default="stabilityai/sd-turbo", required=True)
     parser.add_argument("--swiftbrush_checkpoint_path", type=str, required=True)
     parser.add_argument("--dataset_name", type=str, required=True)
+    parser.add_argument("--token_name", type=str, required=True)
     parser.add_argument("--train_data_dir", type=str, required=True)
     parser.add_argument("--output_dir", type=str, default="swiftbrush-finetuned-lora")
     parser.add_argument("--resume_from_checkpoint", type=str, default="latest")
@@ -115,9 +116,9 @@ def main():
                                       zip(train_dataset.class_names, placeholder_tokens)}
     text_encoder.resize_token_embeddings(len(tokenizer))
     token_embeds = text_encoder.get_input_embeddings().weight.data
-    initializer_token_id = tokenizer.convert_tokens_to_ids(args.dataset_name)
+    initializer_token_id = tokenizer.convert_tokens_to_ids(args.token_name)
     if initializer_token_id == tokenizer.unk_token_id:
-        raise ValueError(f"The dataset_name '{args.dataset_name}' is not a valid token in the tokenizer.")
+        raise ValueError(f"The dataset_name '{args.token_name}' is not a valid token in the tokenizer.")
 
     with torch.no_grad():
         for token_id in placeholder_token_ids:
